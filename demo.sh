@@ -24,9 +24,7 @@ RPC_ARGS=("-r" "$RPC_URL")
 if [[ -n "$RPC_USER" ]]; then RPC_ARGS+=("-u" "$RPC_USER"); fi
 if [[ -n "$RPC_PASS" ]]; then RPC_ARGS+=("-p" "$RPC_PASS"); fi
 
-echo "════════════════════════════════════════════════════════════════"
-echo "  ZHAC — Zcash Privacy Guard  ·  Demo"
-echo "════════════════════════════════════════════════════════════════"
+echo "  ZHAC Demo"
 echo ""
 
 # ── 1. Key Generation ────────────────────────────────────────────────────────
@@ -89,31 +87,33 @@ echo "▸ 8. Zcash Login — Chain-State-Bound Authentication"
 echo "  RPC endpoint: $RPC_URL"
 echo ""
 
-# Step A: Query the Zcash node for mainnet info
-echo "  [A] Querying Zcash mainnet..."
-if MAINNET_OUT=$($ZHAC mainnet-info "${RPC_ARGS[@]}" 2>&1); then
-  echo "$MAINNET_OUT" | sed 's/^/    /'
-  echo ""
+# Optional: If a real node is available, show mainnet-bound auth too
+if [[ -n "${ZHAC_RPC_URL:-}" ]]; then
+    echo "  (Optional) Mainnet-bound authentication with ZHAC_RPC_URL=$ZHAC_RPC_URL"
+    echo "  Run: zhac node-select  # to configure a LightwalletD endpoint"
+    echo "  Then: zhac auth-challenge -k priv.txt -p pub.txt -o token.json"
+    echo "  Then: zhac auth-verify -t token.json"
+fi
 
-  # Step B: Create auth challenge bound to mainnet block
-  echo "  [B] Creating auth challenge (bound to mainnet block)..."
-  AUTH_TOKEN="$WORKDIR/auth_token.json"
-  if $ZHAC auth-challenge -k "$WORKDIR/alice.priv" -p "$WORKDIR/alice.pub" -o "$AUTH_TOKEN" "${RPC_ARGS[@]}"; then
-    echo ""
+echo "  Using mock chain state (no Zcash node required)..."
 
-    # Step C: Verify the auth token against mainnet
-    echo "  [C] Verifying auth token against mainnet..."
-    if $ZHAC auth-verify -t "$AUTH_TOKEN" "${RPC_ARGS[@]}"; then
-      echo "  ✓ Mainnet authentication successful!"
+AUTH_TOKEN="$WORKDIR/auth_token.json"
+
+echo "  [A] Creating auth challenge..."
+if $ZHAC auth-challenge -k "$WORKDIR/alice.priv" -p "$WORKDIR/alice.pub" --mock -o "$AUTH_TOKEN"; then
+    echo "  Challenge created."
+
+    echo "  [B] Verifying auth token (signature-only)..."
+    if $ZHAC auth-verify -t "$AUTH_TOKEN" -s; then
+        echo "  ✓ Auth token signature verified!"
     else
-      echo "  ✗ Auth verification failed (token may have expired — re-run within 5 min)"
+        echo "  ✗ Auth verification failed"
     fi
-  else
-    echo "  ✗ Auth challenge failed — check RPC credentials"
-  fi
 else
-  echo "  ✗ No Zcash node available at $RPC_URL"
-  echo "    Falling back to mock auth challenge (signature-only verification)..."
+    echo "  ✗ Auth challenge failed"
+fi
+echo ""
+
   echo ""
 
   # Offline fallback: create a mock auth token using --mock flag,
