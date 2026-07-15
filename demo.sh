@@ -136,7 +136,8 @@ echo ""
   echo ""
   echo "  Run with a zebrad node to see full mainnet-bound authentication:"
   echo "    export ZHAC_RPC_URL=http://127.0.0.1:8232 && ./demo.sh"
-fi
+  fi
+else
 echo ""
 
 echo "════════════════════════════════════════════════════════════════"
