@@ -1,151 +1,96 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -e
+set -u
+set -o pipefail
 
-ZHAC="${ZHAC:-}"
-if [[ -z "$ZHAC" ]]; then
-  if [[ -x "./target/release/zhac" ]]; then
+ZHAC=""
+if [ -n "${ZHAC:-}" ]; then
+    :
+elif [ -x "./target/release/zhac" ]; then
     ZHAC="./target/release/zhac"
-  elif [[ -x "./target/debug/zhac" ]]; then
+elif [ -x "./target/debug/zhac" ]; then
     ZHAC="./target/debug/zhac"
-  else
+else
     echo "Error: zhac binary not found. Build with: cargo build --release" >&2
     exit 1
-  fi
 fi
 
-RPC_URL="${ZHAC_RPC_URL:-http://127.0.0.1:8232}"
-RPC_USER="${ZHAC_RPC_USER:-}"
-RPC_PASS="${ZHAC_RPC_PASS:-}"
 WORKDIR="$(mktemp -d)"
-trap 'rm -rf "$WORKDIR"' EXIT
+cleanup() {
+    rm -rf "$WORKDIR"
+}
+trap cleanup EXIT
 
-# Build RPC args
-RPC_ARGS=("-r" "$RPC_URL")
-if [[ -n "$RPC_USER" ]]; then RPC_ARGS+=("-u" "$RPC_USER"); fi
-if [[ -n "$RPC_PASS" ]]; then RPC_ARGS+=("-p" "$RPC_PASS"); fi
-
-echo "  ZHAC Demo"
+echo "============================================================"
+echo "  ZHAC - Zcash Privacy Guard - Demo"
+echo "============================================================"
 echo ""
 
-# ── 1. Key Generation ────────────────────────────────────────────────────────
-echo "▸ 1. Key Generation"
-$ZHAC gen-key -o "$WORKDIR/alice.priv" -p "$WORKDIR/alice.pub"
-$ZHAC gen-key -o "$WORKDIR/bob.priv" -p "$WORKDIR/bob.pub"
-echo "  Alice and Bob key-pairs generated."
+echo "-> 1. Key Generation"
+"$ZHAC" gen-key -o "$WORKDIR/alice.priv" -p "$WORKDIR/alice.pub"
+"$ZHAC" gen-key -o "$WORKDIR/bob.priv" -p "$WORKDIR/bob.pub"
+echo "   Alice and Bob key-pairs generated."
 echo ""
 
-# ── 2. Fingerprint ───────────────────────────────────────────────────────────
-echo "▸ 2. Key Fingerprints"
-echo "  Alice: $($ZHAC fingerprint -k "$WORKDIR/alice.pub")"
-echo "  Bob:   $($ZHAC fingerprint -k "$WORKDIR/bob.pub")"
+echo "-> 2. Key Fingerprints"
+ALICE_FP=$("$ZHAC" fingerprint -k "$WORKDIR/alice.pub")
+BOB_FP=$("$ZHAC" fingerprint -k "$WORKDIR/bob.pub")
+echo "   Alice: $ALICE_FP"
+echo "   Bob:   $BOB_FP"
 echo ""
 
-# ── 3. Encryption ────────────────────────────────────────────────────────────
-echo "▸ 3. Encryption (single recipient)"
-echo "  Meet me at the Zcash booth at 3pm" >"$WORKDIR/secret.txt"
-$ZHAC encrypt -k "$WORKDIR/alice.pub" -i "$WORKDIR/secret.txt" -o "$WORKDIR/secret.zhac"
-echo "  Ciphertext size: $(wc -c <"$WORKDIR/secret.zhac") bytes"
+echo "-> 3. Encryption (single recipient)"
+printf "Meet me at the Zcash booth at 3pm\n" > "$WORKDIR/secret.txt"
+"$ZHAC" encrypt -k "$WORKDIR/alice.pub" -i "$WORKDIR/secret.txt" -o "$WORKDIR/secret.zhac"
+CT_SIZE=$(wc -c < "$WORKDIR/secret.zhac")
+echo "   Ciphertext size: $CT_SIZE bytes"
 echo ""
 
-# ── 4. Decryption ────────────────────────────────────────────────────────────
-echo "▸ 4. Decryption"
-$ZHAC decrypt -k "$WORKDIR/alice.priv" -i "$WORKDIR/secret.zhac" -o "$WORKDIR/decrypted.txt"
-echo "  Decrypted: $(cat "$WORKDIR/decrypted.txt")"
+echo "-> 4. Decryption"
+"$ZHAC" decrypt -k "$WORKDIR/alice.priv" -i "$WORKDIR/secret.zhac" -o "$WORKDIR/decrypted.txt"
+DECRYPTED=$(cat "$WORKDIR/decrypted.txt")
+echo "   Decrypted: $DECRYPTED"
 echo ""
 
-# ── 5. Multi-Recipient Encryption ────────────────────────────────────────────
-echo "▸ 5. Multi-Recipient Encryption (Alice + Bob)"
-$ZHAC encrypt -k "$WORKDIR/alice.pub" -k "$WORKDIR/bob.pub" \
-  -i "$WORKDIR/secret.txt" -o "$WORKDIR/multi.zhac"
+echo "-> 5. Multi-Recipient Encryption (Alice + Bob)"
+"$ZHAC" encrypt -k "$WORKDIR/alice.pub" -k "$WORKDIR/bob.pub" -i "$WORKDIR/secret.txt" -o "$WORKDIR/multi.zhac"
 echo ""
-echo "  Alice decrypts:"
-$ZHAC decrypt -k "$WORKDIR/alice.priv" -i "$WORKDIR/multi.zhac" -o "$WORKDIR/alice_dec.txt"
-echo "    → $(cat "$WORKDIR/alice_dec.txt")"
-echo "  Bob decrypts:"
-$ZHAC decrypt -k "$WORKDIR/bob.priv" -i "$WORKDIR/multi.zhac" -o "$WORKDIR/bob_dec.txt"
-echo "    → $(cat "$WORKDIR/bob_dec.txt")"
-echo ""
-
-# ── 6. Signing ───────────────────────────────────────────────────────────────
-echo "▸ 6. Digital Signature (RedJubjub SpendAuth)"
-$ZHAC sign -k "$WORKDIR/alice.priv" -i "$WORKDIR/secret.txt" -o "$WORKDIR/secret.sig"
-$ZHAC verify -k "$WORKDIR/alice.pub" -i "$WORKDIR/secret.txt" -s "$WORKDIR/secret.sig"
-echo "  Signature verified."
+echo "   Alice decrypts:"
+"$ZHAC" decrypt -k "$WORKDIR/alice.priv" -i "$WORKDIR/multi.zhac" -o "$WORKDIR/alice_dec.txt"
+ALICE_DEC=$(cat "$WORKDIR/alice_dec.txt")
+echo "     -> $ALICE_DEC"
+echo "   Bob decrypts:"
+"$ZHAC" decrypt -k "$WORKDIR/bob.priv" -i "$WORKDIR/multi.zhac" -o "$WORKDIR/bob_dec.txt"
+BOB_DEC=$(cat "$WORKDIR/bob_dec.txt")
+echo "     -> $BOB_DEC"
 echo ""
 
-# ── 7. Viewing Key ───────────────────────────────────────────────────────────
-# NOTE: The view-key CLI command was removed because it required the diversifier
-# as a separate parameter, which is fragile to parse from key-info output.
-# Instead, we demonstrate that decryption works with the full private key,
-# and show the key-info output for transparency.
-echo "▸ 7. Key Info (viewing key metadata)"
-$ZHAC key-info -k "$WORKDIR/alice.pub"
+echo "-> 6. Digital Signature (RedJubjub SpendAuth)"
+"$ZHAC" sign -k "$WORKDIR/alice.priv" -i "$WORKDIR/secret.txt" -o "$WORKDIR/secret.sig"
+"$ZHAC" verify -k "$WORKDIR/alice.pub" -i "$WORKDIR/secret.txt" -s "$WORKDIR/secret.sig"
+echo "   Signature verified."
 echo ""
 
-# ── 8. Zcash Login — Authentication Challenge ────────────────────────────────
-echo "▸ 8. Zcash Login — Chain-State-Bound Authentication"
-echo "  RPC endpoint: $RPC_URL"
+echo "-> 7. Key Info"
+"$ZHAC" key-info -k "$WORKDIR/alice.pub"
 echo ""
 
-# Optional: If a real node is available, show mainnet-bound auth too
-if [[ -n "${ZHAC_RPC_URL:-}" ]]; then
-    echo "  (Optional) Mainnet-bound authentication with ZHAC_RPC_URL=$ZHAC_RPC_URL"
-    echo "  Run: zhac node-select  # to configure a LightwalletD endpoint"
-    echo "  Then: zhac auth-challenge -k priv.txt -p pub.txt -o token.json"
-    echo "  Then: zhac auth-verify -t token.json"
-fi
-
-echo "  Using mock chain state (no Zcash node required)..."
-
+echo "-> 8. Zcash Login - Mock Authentication"
+echo "   Using mock chain state (no Zcash node required)..."
 AUTH_TOKEN="$WORKDIR/auth_token.json"
-
-echo "  [A] Creating auth challenge..."
-if $ZHAC auth-challenge -k "$WORKDIR/alice.priv" -p "$WORKDIR/alice.pub" --mock -o "$AUTH_TOKEN"; then
-    echo "  Challenge created."
-
-    echo "  [B] Verifying auth token (signature-only)..."
-    if $ZHAC auth-verify -t "$AUTH_TOKEN" -s; then
-        echo "  ✓ Auth token signature verified!"
-    else
-        echo "  ✗ Auth verification failed"
-    fi
-else
-    echo "  ✗ Auth challenge failed"
-fi
+echo "   [A] Creating auth challenge..."
+"$ZHAC" auth-challenge -k "$WORKDIR/alice.priv" -p "$WORKDIR/alice.pub" --mock -o "$AUTH_TOKEN"
+echo "   Challenge created."
+echo "   [B] Verifying auth token (signature-only)..."
+"$ZHAC" auth-verify -t "$AUTH_TOKEN" -s
+echo "   Auth token signature verified!"
 echo ""
 
-  echo ""
-
-  # Offline fallback: create a mock auth token using --mock flag,
-  # then verify with --signature-only. This exercises the actual auth
-  # protocol code path, just with mock chain state.
-  echo "  [B] Creating auth token (--mock, no node required)..."
-  AUTH_TOKEN="$WORKDIR/auth_token.json"
-  if $ZHAC auth-challenge -k "$WORKDIR/alice.priv" -p "$WORKDIR/alice.pub" --mock -o "$AUTH_TOKEN"; then
-    echo ""
-
-    echo "  [C] Verifying auth token (signature-only)..."
-    if $ZHAC auth-verify -t "$AUTH_TOKEN" -s; then
-      echo "  ✓ Auth token signature verified!"
-    else
-      echo "  ✗ Auth verification failed"
-    fi
-  else
-    echo "  ✗ Auth challenge failed"
-  fi
-  echo ""
-  echo "  Run with a zebrad node to see full mainnet-bound authentication:"
-  echo "    export ZHAC_RPC_URL=http://127.0.0.1:8232 && ./demo.sh"
-  fi
-else
+echo "============================================================"
+echo "  All operations completed successfully!"
 echo ""
-
-echo "════════════════════════════════════════════════════════════════"
-echo "  All operations completed!"
-echo ""
-echo "  To run with a real Zcash node:"
-echo "    export ZHAC_RPC_URL=http://127.0.0.1:8232"
-echo "    export ZHAC_RPC_USER=user  (if needed)"
-echo "    export ZHAC_RPC_PASS=pass  (if needed)"
-echo "    ./demo.sh"
-echo "════════════════════════════════════════════════════════════════"
+echo "  For mainnet-bound authentication:"
+echo "    1. Run: zhac node-select"
+echo "    2. Run: zhac auth-challenge -k priv.txt -p pub.txt -o token.json"
+echo "    3. Run: zhac auth-verify -t token.json"
+echo "============================================================"
