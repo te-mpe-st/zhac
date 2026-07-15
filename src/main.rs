@@ -514,6 +514,11 @@ fn cmd_auth_challenge(
 
     let token = zhac::auth::AuthToken::create_with_pubkey(challenge, &sk, &pk)?;
     let json = token.to_json()?;
+    
+    if let Some(parent) = output.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    
     fs::write(&output, &json)?;
     log(&format!("Auth token written -> {} (key ID: {})", output.display(), pk.key_id()));
     Ok(())
