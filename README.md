@@ -1,5 +1,7 @@
 # ZHAC Has Awesome Cryptography
 
+## WARNING: DO NOT USE IN PRODUCTION. THIS IS UNAUDITED AND IS A MINIMUM VIABLE PRODUCT FOR A HACKATHON.
+
 **A GPG-inspired CLI tool and library built on Zcash Sapling.**
 
 ZHAC unifies the cryptographic stack via aligning solely with the cryptography
